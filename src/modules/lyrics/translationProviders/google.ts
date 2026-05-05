@@ -1,7 +1,6 @@
 import { TRANSLATE_IN_ROMAJI, TRANSLATE_LYRICS_URL, TRANSLATION_ERROR_LOG } from "@constants";
 import { log } from "@utils";
 import { getCachedRomanization, getCachedTranslation, setCachedRomanization, setCachedTranslation } from "./cache";
-import { BATCH_SEPARATOR, chunkByUrlLength, type ChunkItem } from "./chunking";
 import type {
   BatchRequest,
   BatchRomanizationResponse,
@@ -20,6 +19,43 @@ export const googleProvider: TranslationProvider<"google"> = {
 };
 
 // -- Implementation --------------------------
+
+const BATCH_SEPARATOR = "\n\n;\n\n";
+const MAX_URL_LENGTH = 15000;
+
+interface ChunkItem {
+  index: number;
+  text: string;
+}
+
+/**
+ * Splits items into chunks so that each chunk's encoded length plus a fixed base URL
+ * stays under MAX_URL_LENGTH.
+ */
+function chunkByUrlLength(items: ChunkItem[], baseUrlLength: number): ChunkItem[][] {
+  const chunks: ChunkItem[][] = [];
+  let currentChunk: ChunkItem[] = [];
+  let currentEncodedLength = 0;
+  const separatorEncoded = encodeURIComponent(BATCH_SEPARATOR);
+
+  for (const item of items) {
+    const itemEncoded = encodeURIComponent(item.text);
+    const addedLength = (currentChunk.length > 0 ? separatorEncoded.length : 0) + itemEncoded.length;
+
+    if (currentChunk.length > 0 && baseUrlLength + currentEncodedLength + addedLength > MAX_URL_LENGTH) {
+      chunks.push(currentChunk);
+      currentChunk = [];
+      currentEncodedLength = 0;
+    }
+
+    currentChunk.push(item);
+    currentEncodedLength += (currentChunk.length > 1 ? separatorEncoded.length : 0) + itemEncoded.length;
+  }
+  if (currentChunk.length > 0) {
+    chunks.push(currentChunk);
+  }
+  return chunks;
+}
 
 async function translateBatch(request: BatchRequest): Promise<BatchTranslationResponse> {
   const { lines, targetLanguage, signal } = request;

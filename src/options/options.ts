@@ -964,6 +964,7 @@ function initTranslationApiProviderHandlers(): void {
   select.addEventListener("change", () => {
     updateDeeplApiKeyVisibility();
     if (select.value === "deepl") {
+      saveOptions();
       requestDeeplPermission(select);
     } else {
       chrome.permissions.remove({ origins: [...DEEPL_HOST_PERMISSIONS] });
@@ -975,19 +976,13 @@ function initTranslationApiProviderHandlers(): void {
 function requestDeeplPermission(select: HTMLSelectElement): void {
   const origins = [...DEEPL_HOST_PERMISSIONS];
   chrome.permissions.contains({ origins }, hasPermission => {
-    if (hasPermission) {
-      saveOptions();
-      return;
-    }
+    if (hasPermission) return;
     chrome.permissions.request({ origins }, granted => {
-      if (!granted) {
-        select.value = "google";
-        updateDeeplApiKeyVisibility();
-        saveOptions();
-        showAlert(t("options_alert_deeplPermissionDenied"));
-        return;
-      }
+      if (granted) return;
+      select.value = "google";
+      updateDeeplApiKeyVisibility();
       saveOptions();
+      showAlert(t("options_alert_deeplPermissionDenied"));
     });
   });
 }

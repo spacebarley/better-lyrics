@@ -2,6 +2,7 @@ import { GENERAL_ERROR_LOG, UNISON_DOCK_DEFAULT_POSITION } from "@constants";
 import type { LyricsData } from "@modules/lyrics/injectLyrics";
 import { createLyrics } from "@modules/lyrics/lyrics";
 import type { UnisonData } from "@modules/lyrics/providers/unison";
+import type { ProviderConfigMap, TranslationProviderKey } from "@modules/lyrics/translationProviders/types";
 import { flushLoader } from "@modules/ui/dom";
 import { log } from "@utils";
 
@@ -40,6 +41,8 @@ interface AppStateType {
   romanizationDisabledLanguages: string[];
   translationDisabledLanguages: string[];
   translationLanguage: string;
+  translationApiProvider: TranslationProviderKey;
+  translationProviderConfigs: ProviderConfigMap;
   isPassiveScrollEnabled: boolean;
   hasPreloadedNextSong: boolean;
   currentInjectionId: number;
@@ -69,6 +72,11 @@ export const AppState: AppStateType = {
   romanizationDisabledLanguages: [],
   translationDisabledLanguages: [],
   translationLanguage: "en",
+  translationApiProvider: "google",
+  translationProviderConfigs: {
+    google: {},
+    deepl: { apiKey: "" },
+  },
   isPassiveScrollEnabled: true,
   hasPreloadedNextSong: false,
   currentInjectionId: 0,

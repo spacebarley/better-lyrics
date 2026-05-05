@@ -313,6 +313,8 @@ export function loadTranslationSettings(): void {
       translationLanguage: "en",
       romanizationDisabledLanguages: [],
       translationDisabledLanguages: [],
+      translationApiProvider: "google",
+      deeplApiKey: "",
     },
     items => {
       AppState.isTranslateEnabled = items.isTranslateEnabled;
@@ -320,6 +322,11 @@ export function loadTranslationSettings(): void {
       AppState.translationLanguage = items.translationLanguage || "en";
       AppState.romanizationDisabledLanguages = items.romanizationDisabledLanguages || [];
       AppState.translationDisabledLanguages = items.translationDisabledLanguages || [];
+      AppState.translationApiProvider = items.translationApiProvider === "deepl" ? "deepl" : "google";
+      AppState.translationProviderConfigs = {
+        google: {},
+        deepl: { apiKey: items.deeplApiKey || "" },
+      };
     }
   );
 }

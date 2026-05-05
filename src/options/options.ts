@@ -79,7 +79,7 @@ function getSelectedUnisonPosition(): string {
 
 function getSelectedTranslationApiProvider(): TranslationProviderKey {
   const value = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
-  return value === "deepl" ? "deepl" : "google";
+  return findTranslationProviderSpec(value)?.key ?? FALLBACK_TRANSLATION_PROVIDER;
 }
 
 // Function to save options to Chrome storage
@@ -263,7 +263,7 @@ const setOptionsInForm = (items: Options): void => {
   const providerSelect = document.getElementById("translationApiProvider") as HTMLSelectElement;
   providerSelect.value = items.translationApiProvider === "deepl" ? "deepl" : "google";
   (document.getElementById("deeplApiKey") as HTMLInputElement).value = items.deeplApiKey;
-  updateDeeplApiKeyVisibility();
+  updateTranslationProviderConfigVisibility();
   (document.getElementById("isRomanizationEnabled") as HTMLInputElement).checked = items.isRomanizationEnabled;
   (document.getElementById("uiLanguage") as HTMLSelectElement).value = items.uiLanguage;
   (document.getElementById("isUnisonPinnedDockEnabled") as HTMLInputElement).checked = items.isUnisonPinnedDockEnabled;
@@ -950,11 +950,40 @@ function filterLanguagePills(containerId: string, query: string): void {
 
 // -- Translation API provider --------------------------
 
-function updateDeeplApiKeyVisibility(): void {
-  const provider = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
-  const container = document.getElementById("deeplApiKeyContainer");
-  if (!container) return;
-  container.style.display = provider === "deepl" ? "" : "none";
+const FALLBACK_TRANSLATION_PROVIDER: TranslationProviderKey = "google";
+
+interface TranslationProviderUiSpec {
+  readonly key: TranslationProviderKey;
+  /** Container shown only when this provider is selected. Omit when no extra config UI is needed. */
+  readonly configContainerId?: string;
+  /** Hosts to request via chrome.permissions.request. Omit for CORS-friendly endpoints. */
+  readonly hostPermissions?: readonly string[];
+  /** i18n key for the alert shown when the user denies the host permission. */
+  readonly permissionDeniedAlertKey?: string;
+}
+
+const TRANSLATION_PROVIDER_UI_SPECS: ReadonlyArray<TranslationProviderUiSpec> = [
+  { key: "google" },
+  {
+    key: "deepl",
+    configContainerId: "deeplApiKeyContainer",
+    hostPermissions: DEEPL_HOST_PERMISSIONS,
+    permissionDeniedAlertKey: "options_alert_deeplPermissionDenied",
+  },
+];
+
+function findTranslationProviderSpec(value: string | undefined): TranslationProviderUiSpec | undefined {
+  return TRANSLATION_PROVIDER_UI_SPECS.find(spec => spec.key === value);
+}
+
+function updateTranslationProviderConfigVisibility(): void {
+  const selected = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
+  for (const spec of TRANSLATION_PROVIDER_UI_SPECS) {
+    if (!spec.configContainerId) continue;
+    const container = document.getElementById(spec.configContainerId);
+    if (!container) continue;
+    container.style.display = spec.key === selected ? "" : "none";
+  }
 }
 
 function initTranslationApiProviderHandlers(): void {
@@ -962,27 +991,42 @@ function initTranslationApiProviderHandlers(): void {
   if (!select) return;
 
   select.addEventListener("change", () => {
-    updateDeeplApiKeyVisibility();
-    if (select.value === "deepl") {
-      saveOptions();
-      requestDeeplPermission(select);
-    } else {
-      chrome.permissions.remove({ origins: [...DEEPL_HOST_PERMISSIONS] });
-      saveOptions();
+    updateTranslationProviderConfigVisibility();
+    const selectedSpec = findTranslationProviderSpec(select.value);
+    if (!selectedSpec) return;
+
+    // Optimistic save: chrome.permissions.request can close the popup and
+    // destroy the JS context before the callback fires, so persist the pick
+    // first. ensureTranslationProviderPermission only handles the denial path.
+    saveOptions();
+
+    // Drop other providers' host permissions so the granted-host list tracks
+    // only the active provider's needs.
+    for (const spec of TRANSLATION_PROVIDER_UI_SPECS) {
+      if (spec.key !== selectedSpec.key && spec.hostPermissions) {
+        chrome.permissions.remove({ origins: [...spec.hostPermissions] });
+      }
+    }
+
+    if (selectedSpec.hostPermissions) {
+      ensureTranslationProviderPermission(select, selectedSpec);
     }
   });
 }
 
-function requestDeeplPermission(select: HTMLSelectElement): void {
-  const origins = [...DEEPL_HOST_PERMISSIONS];
+function ensureTranslationProviderPermission(select: HTMLSelectElement, spec: TranslationProviderUiSpec): void {
+  if (!spec.hostPermissions) return;
+  const origins = [...spec.hostPermissions];
   chrome.permissions.contains({ origins }, hasPermission => {
     if (hasPermission) return;
     chrome.permissions.request({ origins }, granted => {
       if (granted) return;
-      select.value = "google";
-      updateDeeplApiKeyVisibility();
+      select.value = FALLBACK_TRANSLATION_PROVIDER;
+      updateTranslationProviderConfigVisibility();
       saveOptions();
-      showAlert(t("options_alert_deeplPermissionDenied"));
+      if (spec.permissionDeniedAlertKey) {
+        showAlert(t(spec.permissionDeniedAlertKey));
+      }
     });
   });
 }

@@ -1,3 +1,4 @@
+import { deeplProvider } from "./deepl";
 import { googleProvider } from "./google";
 import type {
   BatchRequest,
@@ -9,8 +10,11 @@ import type {
 
 const providers = {
   google: googleProvider,
+  deepl: deeplProvider,
 } as const;
 
+// Selection from user settings is wired through AppState in a follow-up commit.
+// Until then the dispatcher always routes to Google.
 export function getActiveProviderKey(): TranslationProviderKey {
   return "google";
 }

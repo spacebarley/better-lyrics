@@ -10,6 +10,8 @@
  */
 import { LOG_PREFIX_BACKGROUND } from "@constants";
 import { getLocalStorage, getSyncStorage } from "@core/storage";
+import { fetchDeeplTranslations } from "@modules/lyrics/translationProviders/deeplApi";
+import { ProviderError } from "@modules/lyrics/translationProviders/types";
 import {
   getInstalledStoreThemes,
   installSymlinkedThemeFromMarketplace,
@@ -128,7 +130,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
   }
 });
 
-chrome.runtime.onMessage.addListener(request => {
+chrome.runtime.onMessage.addListener((request, _sender, sendResponse) => {
   if (request.action === "applyStyles") {
     chrome.tabs.query({ url: "*://music.youtube.com/*" }, tabs => {
       tabs.forEach(tab => {
@@ -139,6 +141,25 @@ chrome.runtime.onMessage.addListener(request => {
         }
       });
     });
+    return true;
   }
-  return true;
+
+  if (request.action === "deepl-translate") {
+    fetchDeeplTranslations(request.apiKey, request.texts, request.targetLang)
+      .then(result => sendResponse({ ok: true, translations: result.translations }))
+      .catch(err => {
+        if (err instanceof ProviderError) {
+          sendResponse({
+            ok: false,
+            error: { kind: err.kind, message: err.message, retryAfterSeconds: err.retryAfterSeconds },
+          });
+          return;
+        }
+        const message = err instanceof Error ? err.message : String(err);
+        sendResponse({ ok: false, error: { kind: "network", message } });
+      });
+    return true; // keep channel open for async sendResponse
+  }
+
+  return false;
 });

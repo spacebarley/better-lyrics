@@ -62,6 +62,11 @@ export const TRANSLATE_IN_ROMAJI = function (lang: string, text: string): string
   return `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${lang}&tl=${lang}-Latn&dt=t&dt=rm&q=${encodeURIComponent(text)}`;
 };
 
+// DeepL translation provider
+export const DEEPL_TRANSLATE_FREE_URL = "https://api-free.deepl.com/v2/translate" as const;
+export const DEEPL_TRANSLATE_PRO_URL = "https://api.deepl.com/v2/translate" as const;
+export const DEEPL_HOST_PERMISSIONS = ["https://api.deepl.com/*", "https://api-free.deepl.com/*"] as const;
+
 export const CUBEY_LYRICS_API_URL_TURNSTILE = "https://lyrics.api.dacubeking.com/" as const;
 
 export const CUBEY_LYRICS_API_URL = "https://lyrics.api.dacubeking.com/" as const;

@@ -1,7 +1,8 @@
-export type TranslationProviderKey = "google";
+export type TranslationProviderKey = "google" | "deepl";
 
 export interface ProviderConfigMap {
   google: Record<string, never>;
+  deepl: { apiKey: string };
 }
 
 export type ProviderConfig<K extends TranslationProviderKey> = ProviderConfigMap[K];
@@ -37,7 +38,7 @@ export interface TranslationProvider<K extends TranslationProviderKey = Translat
   romanizeBatch?(request: BatchRequest, config: ProviderConfig<K>): Promise<BatchRomanizationResponse>;
 }
 
-type ProviderErrorKind = "invalid-key" | "quota" | "rate-limit" | "network" | "server" | "unknown";
+export type ProviderErrorKind = "invalid-key" | "quota" | "rate-limit" | "network" | "server" | "unknown";
 
 export class ProviderError extends Error {
   readonly kind: ProviderErrorKind;

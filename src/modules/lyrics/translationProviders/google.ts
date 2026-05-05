@@ -94,7 +94,7 @@ async function translateBatch(request: BatchRequest): Promise<BatchTranslationRe
         }
       });
     } catch (error) {
-      if ((error as Error).name === "AbortError") throw error;
+      if ((error as Error).name === "AbortError") break;
       log(TRANSLATION_ERROR_LOG, error);
     }
   }
@@ -177,7 +177,7 @@ async function romanizeBatch(request: BatchRequest): Promise<BatchRomanizationRe
         }
       });
     } catch (error) {
-      if ((error as Error).name === "AbortError") throw error;
+      if ((error as Error).name === "AbortError") break;
       log(TRANSLATION_ERROR_LOG, error);
     }
   }

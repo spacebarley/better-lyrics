@@ -126,12 +126,18 @@ async function translateBatch(request: BatchRequest, config: { apiKey: string })
   let detectedLanguage = "";
 
   for (const chunk of chunkByCount(toTranslate, MAX_TEXTS_PER_REQUEST)) {
-    const translations = await callBackground(
-      config.apiKey,
-      chunk.map(item => item.text),
-      targetLanguage,
-      signal
-    );
+    let translations: DeeplTranslationItem[];
+    try {
+      translations = await callBackground(
+        config.apiKey,
+        chunk.map(item => item.text),
+        targetLanguage,
+        signal
+      );
+    } catch (error) {
+      if ((error as Error).name === "AbortError") break;
+      throw error;
+    }
 
     chunk.forEach((item, i) => {
       const entry = translations[i];

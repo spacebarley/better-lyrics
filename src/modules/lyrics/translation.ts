@@ -63,7 +63,7 @@ export async function translateBatch(request: BatchRequest): Promise<BatchTransl
   try {
     return await dispatchTranslateBatch(request);
   } catch (error) {
-    if ((error as Error).name === "AbortError") throw error;
+    if ((error as Error).name === "AbortError") return emptyTranslationResponse(request.lines);
     logProviderError(error, providerKey);
     return emptyTranslationResponse(request.lines);
   }
@@ -76,8 +76,9 @@ export async function romanizeBatch(request: BatchRequest): Promise<BatchRomaniz
   try {
     return await dispatchRomanizeBatch(request);
   } catch (error) {
-    if ((error as Error).name === "AbortError") throw error;
-    log(TRANSLATION_ERROR_LOG, "google", error);
+    if ((error as Error).name !== "AbortError") {
+      log(TRANSLATION_ERROR_LOG, "google", error);
+    }
     return { results: request.lines.map(() => null), detectedLanguage: request.sourceLanguage || "auto" };
   }
 }

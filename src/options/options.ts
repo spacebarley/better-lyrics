@@ -1,8 +1,9 @@
 // Function to save user options
 
-import { LOG_PREFIX, ROMANIZATION_LANGUAGES, UNISON_DOCK_DEFAULT_POSITION } from "@constants";
+import { DEEPL_HOST_PERMISSIONS, LOG_PREFIX, ROMANIZATION_LANGUAGES, UNISON_DOCK_DEFAULT_POSITION } from "@constants";
 import { getLanguageDisplayName, initI18n, loadLocaleOverride, SUPPORTED_LOCALES, t } from "@core/i18n";
 import { exportIdentity, getIdentity, importIdentity, type KeyIdentity } from "@core/keyIdentity";
+import type { TranslationProviderKey } from "@modules/lyrics/translationProviders/types";
 import Sortable from "sortablejs";
 import { showModal } from "./editor/ui/feedback";
 import { initStoreUI, setupYourThemesButton } from "./store/store";
@@ -16,6 +17,8 @@ interface Options {
   isPassiveScrollEnabled: boolean;
   isTranslateEnabled: boolean;
   translationLanguage: string;
+  translationApiProvider: TranslationProviderKey;
+  deeplApiKey: string;
   isCursorAutoHideEnabled: boolean;
   isRomanizationEnabled: boolean;
   preferredProviderList: string[];
@@ -53,6 +56,8 @@ const getOptionsFromForm = (): Options => {
     isPassiveScrollEnabled: (document.getElementById("isPassiveScrollEnabled") as HTMLInputElement).checked,
     isTranslateEnabled: (document.getElementById("translate") as HTMLInputElement).checked,
     translationLanguage: (document.getElementById("translationLanguage") as HTMLInputElement).value,
+    translationApiProvider: getSelectedTranslationApiProvider(),
+    deeplApiKey: (document.getElementById("deeplApiKey") as HTMLInputElement).value.trim(),
     isCursorAutoHideEnabled: (document.getElementById("cursorAutoHide") as HTMLInputElement).checked,
     isRomanizationEnabled: (document.getElementById("isRomanizationEnabled") as HTMLInputElement).checked,
     preferredProviderList: preferredProviderList,
@@ -70,6 +75,11 @@ const getOptionsFromForm = (): Options => {
 function getSelectedUnisonPosition(): string {
   const selected = document.querySelector<HTMLElement>("#unison-position-frame .position-cell[data-selected='true']");
   return selected?.dataset.pos ?? UNISON_DOCK_DEFAULT_POSITION;
+}
+
+function getSelectedTranslationApiProvider(): TranslationProviderKey {
+  const value = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
+  return value === "deepl" ? "deepl" : "google";
 }
 
 // Function to save options to Chrome storage
@@ -204,6 +214,8 @@ const restoreOptions = (): void => {
     isPassiveScrollEnabled: true,
     isTranslateEnabled: false,
     translationLanguage: "en",
+    translationApiProvider: "google",
+    deeplApiKey: "",
     isRomanizationEnabled: false,
     preferredProviderList: [
       "bLyrics-richsynced",
@@ -248,6 +260,10 @@ const setOptionsInForm = (items: Options): void => {
   (document.getElementById("isPassiveScrollEnabled") as HTMLInputElement).checked = items.isPassiveScrollEnabled;
   (document.getElementById("translate") as HTMLInputElement).checked = items.isTranslateEnabled;
   (document.getElementById("translationLanguage") as HTMLInputElement).value = items.translationLanguage;
+  const providerSelect = document.getElementById("translationApiProvider") as HTMLSelectElement;
+  providerSelect.value = items.translationApiProvider === "deepl" ? "deepl" : "google";
+  (document.getElementById("deeplApiKey") as HTMLInputElement).value = items.deeplApiKey;
+  updateDeeplApiKeyVisibility();
   (document.getElementById("isRomanizationEnabled") as HTMLInputElement).checked = items.isRomanizationEnabled;
   (document.getElementById("uiLanguage") as HTMLSelectElement).value = items.uiLanguage;
   (document.getElementById("isUnisonPinnedDockEnabled") as HTMLInputElement).checked = items.isUnisonPinnedDockEnabled;
@@ -554,6 +570,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initStoreUI();
   setupYourThemesButton();
   initLangExclusionsModal();
+  initTranslationApiProviderHandlers();
 
   document.getElementById("browse-themes-btn")?.addEventListener("click", () => {
     chrome.tabs.create({
@@ -923,6 +940,43 @@ function filterLanguagePills(containerId: string, query: string): void {
     const langCode = (pill as HTMLElement).dataset.langCode || "";
     const matches = langName.includes(normalizedQuery) || langCode.includes(normalizedQuery);
     pill.classList.toggle("lang-pill-hidden", !matches);
+  });
+}
+
+// -- Translation API provider --------------------------
+
+function updateDeeplApiKeyVisibility(): void {
+  const provider = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
+  const container = document.getElementById("deeplApiKeyContainer");
+  if (!container) return;
+  container.style.display = provider === "deepl" ? "" : "none";
+}
+
+function initTranslationApiProviderHandlers(): void {
+  const select = document.getElementById("translationApiProvider") as HTMLSelectElement | null;
+  if (!select) return;
+
+  select.addEventListener("change", () => {
+    updateDeeplApiKeyVisibility();
+    if (select.value === "deepl") {
+      requestDeeplPermission(select);
+    } else {
+      chrome.permissions.remove({ origins: [...DEEPL_HOST_PERMISSIONS] });
+    }
+  });
+}
+
+function requestDeeplPermission(select: HTMLSelectElement): void {
+  const origins = [...DEEPL_HOST_PERMISSIONS];
+  chrome.permissions.contains({ origins }, hasPermission => {
+    if (hasPermission) return;
+    chrome.permissions.request({ origins }, granted => {
+      if (granted) return;
+      select.value = "google";
+      updateDeeplApiKeyVisibility();
+      saveOptions();
+      showAlert(t("options_alert_deeplPermissionDenied"));
+    });
   });
 }
 

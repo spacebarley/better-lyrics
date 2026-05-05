@@ -501,9 +501,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreOptions();
   restoreActiveTab();
 });
-document.querySelectorAll("#options input, #options select").forEach(element => {
-  element.addEventListener("change", saveOptions);
-});
+// translationApiProvider is excluded here; its handler in
+// initTranslationApiProviderHandlers() is responsible for saving so the save
+// happens AFTER the optional DeepL host permission resolves, not before it.
+document
+  .querySelectorAll("#options input:not(#translationApiProvider), #options select:not(#translationApiProvider)")
+  .forEach(element => {
+    element.addEventListener("change", saveOptions);
+  });
 
 // Tab switcher
 const tabButtons = document.querySelectorAll(".tab");
@@ -962,6 +967,7 @@ function initTranslationApiProviderHandlers(): void {
       requestDeeplPermission(select);
     } else {
       chrome.permissions.remove({ origins: [...DEEPL_HOST_PERMISSIONS] });
+      saveOptions();
     }
   });
 }
@@ -969,13 +975,19 @@ function initTranslationApiProviderHandlers(): void {
 function requestDeeplPermission(select: HTMLSelectElement): void {
   const origins = [...DEEPL_HOST_PERMISSIONS];
   chrome.permissions.contains({ origins }, hasPermission => {
-    if (hasPermission) return;
-    chrome.permissions.request({ origins }, granted => {
-      if (granted) return;
-      select.value = "google";
-      updateDeeplApiKeyVisibility();
+    if (hasPermission) {
       saveOptions();
-      showAlert(t("options_alert_deeplPermissionDenied"));
+      return;
+    }
+    chrome.permissions.request({ origins }, granted => {
+      if (!granted) {
+        select.value = "google";
+        updateDeeplApiKeyVisibility();
+        saveOptions();
+        showAlert(t("options_alert_deeplPermissionDenied"));
+        return;
+      }
+      saveOptions();
     });
   });
 }

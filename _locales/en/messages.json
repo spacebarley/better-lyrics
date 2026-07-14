@@ -176,6 +176,30 @@
     "message": "Translation language",
     "description": "Translation language setting label"
   },
+  "options_language_translationApiProvider": {
+    "message": "Translation provider",
+    "description": "Label for the translation API provider selector"
+  },
+  "options_language_translationApiProvider_google": {
+    "message": "Google Translate",
+    "description": "Google Translate option in the translation provider selector"
+  },
+  "options_language_translationApiProvider_deepl": {
+    "message": "DeepL API",
+    "description": "DeepL option in the translation provider selector"
+  },
+  "options_language_deeplApiKey": {
+    "message": "DeepL API key",
+    "description": "Label for the DeepL API key input"
+  },
+  "options_language_deeplApiKeyPlaceholder": {
+    "message": "Paste your DeepL API key",
+    "description": "Placeholder for the DeepL API key input"
+  },
+  "options_alert_deeplPermissionDenied": {
+    "message": "DeepL access was denied. Falling back to Google.",
+    "description": "Alert shown when the user denies the host permission request for DeepL"
+  },
 
   "options_sources_title": {
     "message": "Lyric Source Preference",

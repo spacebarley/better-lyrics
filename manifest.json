@@ -21,7 +21,10 @@
   "optional_permissions": [
     "downloads"
   ],
-  "optional_host_permissions": [],
+  "optional_host_permissions": [
+    "https://api.deepl.com/*",
+    "https://api-free.deepl.com/*"
+  ],
   "options_ui": {
     "page": "src/options/options.html",
     "open_in_tab": false

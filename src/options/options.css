@@ -324,6 +324,28 @@ body {
     background-size: cover;
 }
 
+.api-key-input {
+    min-width: 25ch;
+    max-width: 50ch;
+    border: 2px solid hsla(0, 0%, 100%, 0.1);
+    padding: 0.25em 0.5em;
+    background-color: hsla(0, 0%, 100%, 0.1);
+    color: #fff;
+    font-family: inherit;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s ease;
+    box-sizing: border-box;
+}
+
+.api-key-input:focus {
+    border-color: hsla(0, 0%, 100%, 0.25);
+}
+
+.api-key-input::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+}
+
 .discord-btn {
     background-color: #5865f2;
 }

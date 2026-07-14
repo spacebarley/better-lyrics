@@ -1,8 +1,9 @@
 // Function to save user options
 
-import { LOG_PREFIX, ROMANIZATION_LANGUAGES, UNISON_DOCK_DEFAULT_POSITION } from "@constants";
+import { DEEPL_HOST_PERMISSIONS, LOG_PREFIX, ROMANIZATION_LANGUAGES, UNISON_DOCK_DEFAULT_POSITION } from "@constants";
 import { getLanguageDisplayName, initI18n, loadLocaleOverride, SUPPORTED_LOCALES, t } from "@core/i18n";
 import { exportIdentity, getIdentity, importIdentity, type KeyIdentity } from "@core/keyIdentity";
+import type { TranslationProviderKey } from "@modules/lyrics/translationProviders/types";
 import Sortable from "sortablejs";
 import { showModal } from "./editor/ui/feedback";
 import { initStoreUI, setupYourThemesButton } from "./store/store";
@@ -16,6 +17,8 @@ interface Options {
   isPassiveScrollEnabled: boolean;
   isTranslateEnabled: boolean;
   translationLanguage: string;
+  translationApiProvider: TranslationProviderKey;
+  deeplApiKey: string;
   isCursorAutoHideEnabled: boolean;
   isRomanizationEnabled: boolean;
   preferredProviderList: string[];
@@ -53,6 +56,8 @@ const getOptionsFromForm = (): Options => {
     isPassiveScrollEnabled: (document.getElementById("isPassiveScrollEnabled") as HTMLInputElement).checked,
     isTranslateEnabled: (document.getElementById("translate") as HTMLInputElement).checked,
     translationLanguage: (document.getElementById("translationLanguage") as HTMLInputElement).value,
+    translationApiProvider: getSelectedTranslationApiProvider(),
+    deeplApiKey: (document.getElementById("deeplApiKey") as HTMLInputElement).value.trim(),
     isCursorAutoHideEnabled: (document.getElementById("cursorAutoHide") as HTMLInputElement).checked,
     isRomanizationEnabled: (document.getElementById("isRomanizationEnabled") as HTMLInputElement).checked,
     preferredProviderList: preferredProviderList,
@@ -70,6 +75,11 @@ const getOptionsFromForm = (): Options => {
 function getSelectedUnisonPosition(): string {
   const selected = document.querySelector<HTMLElement>("#unison-position-frame .position-cell[data-selected='true']");
   return selected?.dataset.pos ?? UNISON_DOCK_DEFAULT_POSITION;
+}
+
+function getSelectedTranslationApiProvider(): TranslationProviderKey {
+  const value = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
+  return findTranslationProviderSpec(value)?.key ?? FALLBACK_TRANSLATION_PROVIDER;
 }
 
 // Function to save options to Chrome storage
@@ -204,6 +214,8 @@ const restoreOptions = (): void => {
     isPassiveScrollEnabled: true,
     isTranslateEnabled: false,
     translationLanguage: "en",
+    translationApiProvider: "google",
+    deeplApiKey: "",
     isRomanizationEnabled: false,
     preferredProviderList: [
       "bLyrics-richsynced",
@@ -248,6 +260,10 @@ const setOptionsInForm = (items: Options): void => {
   (document.getElementById("isPassiveScrollEnabled") as HTMLInputElement).checked = items.isPassiveScrollEnabled;
   (document.getElementById("translate") as HTMLInputElement).checked = items.isTranslateEnabled;
   (document.getElementById("translationLanguage") as HTMLInputElement).value = items.translationLanguage;
+  const providerSelect = document.getElementById("translationApiProvider") as HTMLSelectElement;
+  providerSelect.value = items.translationApiProvider === "deepl" ? "deepl" : "google";
+  (document.getElementById("deeplApiKey") as HTMLInputElement).value = items.deeplApiKey;
+  updateTranslationProviderConfigVisibility();
   (document.getElementById("isRomanizationEnabled") as HTMLInputElement).checked = items.isRomanizationEnabled;
   (document.getElementById("uiLanguage") as HTMLSelectElement).value = items.uiLanguage;
   (document.getElementById("isUnisonPinnedDockEnabled") as HTMLInputElement).checked = items.isUnisonPinnedDockEnabled;
@@ -485,9 +501,14 @@ document.addEventListener("DOMContentLoaded", async () => {
   restoreOptions();
   restoreActiveTab();
 });
-document.querySelectorAll("#options input, #options select").forEach(element => {
-  element.addEventListener("change", saveOptions);
-});
+// translationApiProvider is excluded here; its handler in
+// initTranslationApiProviderHandlers() is responsible for saving so the save
+// happens AFTER the optional DeepL host permission resolves, not before it.
+document
+  .querySelectorAll("#options input:not(#translationApiProvider), #options select:not(#translationApiProvider)")
+  .forEach(element => {
+    element.addEventListener("change", saveOptions);
+  });
 
 // Tab switcher
 const tabButtons = document.querySelectorAll(".tab");
@@ -554,6 +575,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initStoreUI();
   setupYourThemesButton();
   initLangExclusionsModal();
+  initTranslationApiProviderHandlers();
 
   document.getElementById("browse-themes-btn")?.addEventListener("click", () => {
     chrome.tabs.create({
@@ -923,6 +945,89 @@ function filterLanguagePills(containerId: string, query: string): void {
     const langCode = (pill as HTMLElement).dataset.langCode || "";
     const matches = langName.includes(normalizedQuery) || langCode.includes(normalizedQuery);
     pill.classList.toggle("lang-pill-hidden", !matches);
+  });
+}
+
+// -- Translation API provider --------------------------
+
+const FALLBACK_TRANSLATION_PROVIDER: TranslationProviderKey = "google";
+
+interface TranslationProviderUiSpec {
+  readonly key: TranslationProviderKey;
+  /** Container shown only when this provider is selected. Omit when no extra config UI is needed. */
+  readonly configContainerId?: string;
+  /** Hosts to request via chrome.permissions.request. Omit for CORS-friendly endpoints. */
+  readonly hostPermissions?: readonly string[];
+  /** i18n key for the alert shown when the user denies the host permission. */
+  readonly permissionDeniedAlertKey?: string;
+}
+
+const TRANSLATION_PROVIDER_UI_SPECS: ReadonlyArray<TranslationProviderUiSpec> = [
+  { key: "google" },
+  {
+    key: "deepl",
+    configContainerId: "deeplApiKeyContainer",
+    hostPermissions: DEEPL_HOST_PERMISSIONS,
+    permissionDeniedAlertKey: "options_alert_deeplPermissionDenied",
+  },
+];
+
+function findTranslationProviderSpec(value: string | undefined): TranslationProviderUiSpec | undefined {
+  return TRANSLATION_PROVIDER_UI_SPECS.find(spec => spec.key === value);
+}
+
+function updateTranslationProviderConfigVisibility(): void {
+  const selected = (document.getElementById("translationApiProvider") as HTMLSelectElement | null)?.value;
+  for (const spec of TRANSLATION_PROVIDER_UI_SPECS) {
+    if (!spec.configContainerId) continue;
+    const container = document.getElementById(spec.configContainerId);
+    if (!container) continue;
+    container.style.display = spec.key === selected ? "" : "none";
+  }
+}
+
+function initTranslationApiProviderHandlers(): void {
+  const select = document.getElementById("translationApiProvider") as HTMLSelectElement | null;
+  if (!select) return;
+
+  select.addEventListener("change", () => {
+    updateTranslationProviderConfigVisibility();
+    const selectedSpec = findTranslationProviderSpec(select.value);
+    if (!selectedSpec) return;
+
+    // Optimistic save: chrome.permissions.request can close the popup and
+    // destroy the JS context before the callback fires, so persist the pick
+    // first. ensureTranslationProviderPermission only handles the denial path.
+    saveOptions();
+
+    // Drop other providers' host permissions so the granted-host list tracks
+    // only the active provider's needs.
+    for (const spec of TRANSLATION_PROVIDER_UI_SPECS) {
+      if (spec.key !== selectedSpec.key && spec.hostPermissions) {
+        chrome.permissions.remove({ origins: [...spec.hostPermissions] });
+      }
+    }
+
+    if (selectedSpec.hostPermissions) {
+      ensureTranslationProviderPermission(select, selectedSpec);
+    }
+  });
+}
+
+function ensureTranslationProviderPermission(select: HTMLSelectElement, spec: TranslationProviderUiSpec): void {
+  if (!spec.hostPermissions) return;
+  const origins = [...spec.hostPermissions];
+  chrome.permissions.contains({ origins }, hasPermission => {
+    if (hasPermission) return;
+    chrome.permissions.request({ origins }, granted => {
+      if (granted) return;
+      select.value = FALLBACK_TRANSLATION_PROVIDER;
+      updateTranslationProviderConfigVisibility();
+      saveOptions();
+      if (spec.permissionDeniedAlertKey) {
+        showAlert(t(spec.permissionDeniedAlertKey));
+      }
+    });
   });
 }
 
